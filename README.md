@@ -1,5 +1,7 @@
 🚀 AI Ingredient Analyzer – Live Demo
 
+📷 Link: https://ai-ingredient-analyser-v1.streamlit.app
+
 I built an AI-powered web app that analyzes images of product labels or packaging to identify ingredients and relevant product insights. The app leverages Google Gemini via the Agno AI framework for multimodal understanding and integrates Tavily search tools for enhanced context.
 🔧 Tech Stack:
 
