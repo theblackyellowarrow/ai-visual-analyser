@@ -1,6 +1,6 @@
 import streamlit as st
 # Set page configuration as the first command
-st.set_page_config(page_title="📷 AI Ingredient Analyzer Pro", layout="wide")
+st.set_page_config(page_title="📷 AI Ingredient Analyzer", layout="wide")
 
 from PIL import Image
 import os
@@ -15,6 +15,7 @@ from streamlit_extras.badges import badge
 from streamlit_extras.stylable_container import stylable_container
 from agno.agent import Agent
 from agno.models.openai import OpenAIChat
+from agno.models.anthropic import Claude
 from agno.tools.tavily import TavilyTools
 from constants import SYSTEM_PROMPT, INSTRUCTIONS
 
@@ -23,12 +24,12 @@ load_dotenv()
 
 # Initialize Agent
 agent = Agent(
-    model=OpenAIChat(id="o4-mini-2025-04-16", api_key=st.secrets["OPENAI_API_KEY"]),
-    tools=[TavilyTools()],
-    markdown=True,
-    description=SYSTEM_PROMPT,
-    instructions=INSTRUCTIONS
-)
+        model=Claude(id="claude-3-7-sonnet-20250219", api_key=st.secrets["ANTHROPIC_API_KEY"]),
+        tools=[TavilyTools()],
+        markdown=True,
+        description=SYSTEM_PROMPT,
+        instructions=INSTRUCTIONS
+    )
 
 # Dark Theme CSS
 st.markdown("""
@@ -198,7 +199,12 @@ if analyze_button:
         with st.spinner("🔬 Analyzing ingredients... Please wait"):
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
                 image = Image.open(uploaded_image)
-                image.save(tmp_file.name)
+
+                # 🔧 Convert image to RGB if it has an alpha channel
+                if image.mode == 'RGBA':
+                    image = image.convert('RGB')
+                
+                image.save(tmp_file.name,format='JPEG')
                 tmp_path = tmp_file.name
 
             response = agent.run("Analyze the product image", images=[{"filepath": tmp_path}])
@@ -295,8 +301,8 @@ if analyze_button:
 
         # Full Report Section
         st.markdown("---")
-        with st.expander("📝 View Full Analysis Report", expanded=False):
-            st.markdown(content, unsafe_allow_html=True)
+        st.header("📝 View Full Analysis Report")
+        st.markdown(content, unsafe_allow_html=True)
 
     else:
         st.warning("⚠️ Please upload an image first!")

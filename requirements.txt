@@ -68,3 +68,4 @@ websockets==15.0.1
 openai
 matplotlib
 streamlit_extras
+anthropic
