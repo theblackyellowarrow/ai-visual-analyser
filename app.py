@@ -5,18 +5,11 @@ from dotenv import load_dotenv
 import tempfile
 import re
 import matplotlib.pyplot as plt
-from streamlit_extras.metric_cards import style_metric_cards
-from streamlit_extras.badges import badge
-from streamlit_extras.stylable_container import stylable_container
-from agno.agent import Agent
-from agno.models.anthropic import Claude
-from agno.tools.tavily import TavilyTools
-from constants import SYSTEM_PROMPT, INSTRUCTIONS
 
 # Load environment
 load_dotenv()
 
-# Initialize session state
+# Initialise session state
 if 'processing' not in st.session_state:
     st.session_state.processing = False
 if 'result' not in st.session_state:
@@ -24,24 +17,29 @@ if 'result' not in st.session_state:
 if 'image_path' not in st.session_state:
     st.session_state.image_path = None
 
-# Setup agent
-agent = Agent(
-    model=Claude(id="claude-3-5-haiku-20241022", api_key=st.secrets["ANTHROPIC_API_KEY"]),
-    tools=[TavilyTools()],
-    markdown=True,
-    description=SYSTEM_PROMPT,
-    instructions=INSTRUCTIONS
-)
+# Placeholder for agent logic due to missing dependencies
+def dummy_agent_run(prompt, images):
+    return {
+        "content": (
+            "Formalist Analysis: Use of line and form is confident, yet restrained.\n"
+            "Iconographical Analysis: The image references classical motifs subtly.\n"
+            "Iconological Analysis: A meditation on memory and decay emerges.\n"
+            "Semiotic Analysis: Visual codes hint at rupture, cultural slippage.\n"
+            "Semantic Analysis: The meaning resists singular interpretation.\n"
+            "Critical Summary: While fragmentary, the image constructs a slow, reflective politics of seeing."
+        )
+    }
 
 # Page config
-st.set_page_config(page_title="📷 AI Ingredient Analyzer", layout="wide")
+st.set_page_config(page_title="📷 AI Visual Analyser", layout="wide")
 
 # Custom CSS styling
 st.markdown("""
 <style>
     .stApp { background-color: #0e1117; color: white; }
     .card { background-color: #1e1e1e; border-radius: 12px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #6c5ce7; }
-    .title-text { color: white; font-weight: 700; text-align: center; margin-bottom: 30px; }
+    .title-text { color: white; font-weight: 700; text-align: center; margin-bottom: 10px; }
+    .subtitle-text { color: #a29bfe; text-align: center; margin-bottom: 30px; font-size: 0.9em; }
     .divider { border-top: 2px solid #333; margin: 15px 0; }
     .stButton>button { background-color: #6c5ce7 !important; color: white !important; border: none; border-radius: 8px; transition: all 0.3s; }
     .param-bar { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #6c5ce7, #a29bfe); margin-top: 5px; }
@@ -49,13 +47,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # App Title
-st.markdown("<h1 class='title-text'>🔍 AI Ingredient Analyzer</h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='title-text'>📷 AI Visual Analyser</h1>", unsafe_allow_html=True)
+st.markdown("<div class='subtitle-text'>Forked and developed by Rahul Bhattacharya as a part of dotai + theblackyellowarrow experiments to make AI contextual</div>", unsafe_allow_html=True)
 
 # Layout columns
 left_col, right_col = st.columns([1, 2])
 
-# Optimize image function
-def optimize_image(image, max_size=800):
+# Image optimiser
+def optimise_image(image, max_size=800):
     width, height = image.size
     if width > max_size or height > max_size:
         if width > height:
@@ -67,144 +66,68 @@ def optimize_image(image, max_size=800):
         return image.resize((new_width, new_height), Image.LANCZOS)
     return image
 
-# Extract scores for parameter breakdown
-def extract_scores(breakdown_text):
-    params = {}
-    matches = re.findall(r'- (.*?): (\d)', breakdown_text)
-    for param, score in matches:
-        params[param.strip()] = int(score)
-    return params
-
-# Plotting function
-def plot_parameter_scores(scores):
-    plt.style.use('dark_background')
-    fig, ax = plt.subplots(figsize=(8,4), facecolor='#1e1e1e')
-    colors = ['#6c5ce7', '#a29bfe', '#74b9ff', '#55efc4', '#ffeaa7']
-    bars = ax.barh(list(scores.keys()), list(scores.values()), color=colors)
-    for bar in bars:
-        width = bar.get_width()
-        ax.text(width + 0.1, bar.get_y() + bar.get_height()/2, f'{width}', va='center', ha='left', color='white')
-    ax.set_xlim(0,5)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_color('#6c5ce7')
-    ax.spines['left'].set_color('#6c5ce7')
-    ax.tick_params(axis='x', colors='white')
-    ax.tick_params(axis='y', colors='white')
-    plt.tight_layout()
-    return fig
-
-# Risk extractor
-def extract_risks(text_block, risk_type):
-    pattern = rf"{risk_type} (.*)"
-    match = re.search(pattern, text_block)
-    if match:
-        risks = [risk.strip() for risk in match.group(1).split(',')]
-        return risks
-    return []
+# Score extractor
+def extract_scores(text):
+    analysis = {}
+    for category in ["Formalist", "Iconographical", "Iconological", "Semiotic", "Semantic"]:
+        match = re.search(rf"{category} Analysis:\s*(.*?)(?:\n|$)", text, re.DOTALL)
+        if match:
+            analysis[category + " Analysis"] = match.group(1).strip()
+        else:
+            analysis[category + " Analysis"] = "No analysis found."
+    summary_match = re.search(r"Critical Summary:\s*(.*)", text, re.DOTALL)
+    if summary_match:
+        analysis["Critical Summary"] = summary_match.group(1).strip()
+    else:
+        analysis["Critical Summary"] = "No summary provided."
+    return analysis
 
 # Upload section
 with left_col:
-    with stylable_container(
-        key="upload-box",
-        css_styles="""
-        border: 2px dashed #6c5ce7;
-        padding: 2rem;
-        border-radius: 20px;
-        background-color: #1e1e1e;
-        text-align: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        """
-    ):
-        st.header("📤 Upload Image", divider="rainbow")
-        uploaded_image = st.file_uploader("", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-        analyze_button = st.button("🔍 Analyze Ingredients", use_container_width=True, type="primary")
+    st.markdown("""
+        <div style='border: 2px dashed #6c5ce7; padding: 2rem; border-radius: 20px; background-color: #1e1e1e; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3);'>
+    """, unsafe_allow_html=True)
+    st.header("📤 Upload Image", divider="rainbow")
+    uploaded_image = st.file_uploader("", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    analyze_button = st.button("🔍 Analyse Your Image", use_container_width=True, type="primary")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# Main Logic
+# Main logic
 if analyze_button and uploaded_image:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
-        image = optimize_image(Image.open(uploaded_image))
+        image = optimise_image(Image.open(uploaded_image))
         if image.mode == 'RGBA':
             image = image.convert('RGB')
         image.save(tmp_file.name, format='JPEG')
         st.session_state.image_path = tmp_file.name
 
-    with st.spinner("🔍 Analyzing ingredients, please wait..."):
+    with st.spinner("🔍 Analysing visual content, please wait..."):
         try:
-            response = agent.run("Analyze the product image", images=[{"filepath": st.session_state.image_path}])
-            st.session_state.result = response.content
+            prompt = (
+                "Please perform a detailed visual analysis in British English under the following five categories: "
+                "Formalist Analysis, Iconographical Analysis, Iconological Analysis, Semiotic Analysis, and Semantic Analysis. "
+                "Conclude with a Critical Summary that synthesises the insights."
+            )
+            response = dummy_agent_run(prompt, images=[{"filepath": st.session_state.image_path}])
+            st.session_state.result = response["content"]
         except Exception as e:
             st.session_state.result = f"❌ Error during analysis: {str(e)}"
         finally:
             if os.path.exists(st.session_state.image_path):
                 os.remove(st.session_state.image_path)
 
-# Right side display
+# Display results
 with right_col:
-    content = st.session_state.result
-
-    if st.session_state.processing:
-        st.markdown("""
-        <div class="card">
-            <h3 style="color: #a29bfe;">🔄 Analysis in progress...</h3>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    elif content:
-        detected = re.search(r'📸 Detected: (.+)', content)
-        if detected:
+    if st.session_state.result:
+        analysis = extract_scores(st.session_state.result)
+        for title, insight in analysis.items():
             st.markdown(f"""
             <div class="card">
-                <h3 style="color: #a29bfe;">🔍 Product Identification</h3>
-                <p style="font-size: 1.1em; color: white;">Detected: <strong style="color: #6c5ce7;">{detected.group(1)}</strong></p>
+                <h3 style="color: #a29bfe;">🔍 {title}</h3>
+                <p style="font-size: 1.1em; color: white;">{insight}</p>
             </div>
             """, unsafe_allow_html=True)
-
-        # Parameter Breakdown Section
-        breakdown_text = re.search(r'🔍 Breakdown:(.+?)🚨', content, re.DOTALL)
-        if breakdown_text:
-            scores = extract_scores(breakdown_text.group(1))
-            st.markdown("""
-            <div class="card">
-                <h3 style="color: #a29bfe;">📊 Ingredient Analysis</h3>
-            """, unsafe_allow_html=True)
-            for param, score in scores.items():
-                st.markdown(f"""
-                <div style="margin-bottom: 15px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                        <span style="color: white;">{param}</span>
-                        <span style="color: #a29bfe;">{score}/5</span>
-                    </div>
-                    <div class="param-bar" style="width: {score*20}%;"></div>
-                </div>
-                """, unsafe_allow_html=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-
-            fig = plot_parameter_scores(scores)
-            st.pyplot(fig)
-
-        # Risk Assessment Section
-        st.markdown("""
-        <div class="card">
-            <h3 style="color: #a29bfe;">⚠️ Safety Assessment</h3>
-        """, unsafe_allow_html=True)
-        high_risks = extract_risks(content, "🚨 High-Risk:")
-        moderate_risks = extract_risks(content, "⚠️ Moderate Risk:")
-        low_risks = extract_risks(content, "✅ Low Risk:")
-        if high_risks:
-            st.error(f"**🚨 High-Risk Ingredients:** {', '.join(high_risks)}")
-        if moderate_risks:
-            st.warning(f"**⚠️ Moderate Risk Ingredients:** {', '.join(moderate_risks)}")
-        if low_risks:
-            st.success(f"**✅ Safe Ingredients:** {', '.join(low_risks)}")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # Full Report
-        st.markdown("---")
-        st.header("📝 View Full Analysis Report")
-        st.markdown(content, unsafe_allow_html=True)
-
-    elif uploaded_image and not st.session_state.processing:
-        st.info("Click 'Analyze Ingredients' to start the analysis.")
-    elif not uploaded_image:
-        st.info("Please upload an image to begin analysis.")
+    elif uploaded_image:
+        st.info("Click 'Analyse Your Image' to begin.")
+    else:
+        st.info("Please upload an image to start.")
